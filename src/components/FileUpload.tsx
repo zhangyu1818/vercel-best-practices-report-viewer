@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import { UploadCloud, FileJson, AlertCircle } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
-import { type Report } from '@/lib/types';
+import { type Report, type RuleViolation } from '@/lib/types';
 
 interface FileUploadProps {
   onUpload: (report: Report) => void;
@@ -24,10 +24,27 @@ export function FileUpload({ onUpload }: FileUploadProps) {
       try {
         const content = e.target?.result as string;
         const json = JSON.parse(content);
-        if (typeof json !== 'object' || json === null) {
+        if (typeof json !== 'object' || json === null || Array.isArray(json)) {
           throw new Error('Invalid JSON format');
         }
-        onUpload(json as Report);
+
+        const parsedReport: Report = {};
+
+        for (const [filePath, value] of Object.entries(json as Record<string, unknown>)) {
+          const rawViolations = Array.isArray(value)
+            ? value
+            : value && typeof value === 'object'
+              ? (value as { findings?: unknown }).findings
+              : undefined;
+
+          if (!Array.isArray(rawViolations)) {
+            throw new Error(`Invalid report format for file: ${filePath}`);
+          }
+
+          parsedReport[filePath] = rawViolations as RuleViolation[];
+        }
+
+        onUpload(parsedReport);
       } catch (err) {
         setError('Failed to parse JSON. Please check the file format.');
         console.error(err);
